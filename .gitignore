@@ -1,5 +1,5 @@
 # Virtualenvs / envs
-chatbot2/
+chatbot/
 .venv/
 venv/
 env/
@@ -26,6 +26,7 @@ Thumbs.db
 input_data/
 data/faiss_index/
 faiss_index/
+objective/
 *.sqlite3
 *.db
 
