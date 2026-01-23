@@ -73,7 +73,10 @@ class TavilySearchTool:
             Search results as formatted string
         """
         results = self._search.invoke(query)
-        return self._format_results(results)
+        # Normalize behavior: if Tavily returns a dict, format it; if it's a string, return it.
+        if isinstance(results, dict):
+            return self._format_results(results)
+        return str(results)
     
     def _format_results(self, results: dict) -> str:
         """
@@ -115,11 +118,21 @@ class TavilySearchTool:
             Dictionary with search results and metadata
         """
         raw_results = self._search.invoke(query)
-        
+
+        # The Tavily client may sometimes return a dict or a plain string.
+        # Normalize to a predictable structure so callers can rely on keys.
+        if isinstance(raw_results, dict):
+            results_list = raw_results.get("results", [])
+            formatted = self._format_results(raw_results)
+        else:
+            # If it's a string, treat it as a preformatted summary/answer
+            results_list = []
+            formatted = str(raw_results)
+
         return {
             "query": query,
-            "results": raw_results,
-            "formatted": self._format_results(raw_results),
+            "results": results_list,
+            "formatted": formatted,
             "source": "tavily_web_search"
         }
 

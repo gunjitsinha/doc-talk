@@ -19,6 +19,7 @@ from typing import Generator, Optional
 from core.document_processor import DocumentProcessor
 from core.vector_store import VectorStoreManager
 from core.chain import RAGChain
+from core.router import QueryRouter
 from tools.tavily_search import TavilySearchTool, HybridSearchManager
 from ui.components import add_message, save_uploaded_file
 
@@ -43,6 +44,7 @@ class ChatInterface:
         self.rag_chain: Optional[RAGChain] = None
         self.tavily_search = TavilySearchTool()
         self.hybrid_search: Optional[HybridSearchManager] = None
+        self.query_router = QueryRouter()
     
     def process_uploaded_files(self, uploaded_files) -> int:
         """
@@ -95,11 +97,11 @@ class ChatInterface:
         use_web_search: bool = False
     ) -> Generator[str, None, None]:
         """
-        Get a streaming response for a query.
+        Get a streaming response for a query with dynamic routing.
         
         Args:
             query: User's question
-            use_web_search: Whether to include web search
+            use_web_search: Whether web search toggle is enabled
             
         Yields:
             Response chunks
@@ -108,88 +110,182 @@ class ChatInterface:
         if self.rag_chain is None and self.vector_store.is_initialized:
             self.initialize_rag_chain()
         
-        # If no documents and no web search, provide helpful message
-        if not self.vector_store.is_initialized and not use_web_search:
+        # Always do initial local search to check relevance
+        doc_results = []
+        if self.vector_store.is_initialized:
+            doc_results = self.vector_store.search(query)
+        
+        # Use intelligent routing with relevance checking
+        routing_decision = self.query_router.route_with_relevance_check(
+            query, doc_results, use_web_search
+        )
+        
+        use_doc_search = routing_decision["use_document_search"]
+        use_web = routing_decision["use_web_search"]
+        
+        # If no sources available, provide helpful message
+        if not use_doc_search and not use_web:
             yield "Please upload some documents first, or enable web search to get started!"
             return
         
-        # Web search enabled
-        if use_web_search:
-            # Get web search results
-            web_results = self.tavily_search.search(query)
-            
-            # Get document results if available
-            doc_results = []
-            if self.vector_store.is_initialized:
-                doc_results = self.vector_store.search(query)
-                
-
-            # Format context
-            context_parts = []
-            
-            if doc_results:
-                context_parts.append("=== From Your Documents ===")
-                for i, doc in enumerate(doc_results, 1):
-                    source = doc.metadata.get("source", "Unknown")
-                    context_parts.append(f"[Doc {i}] ({source}):\n{doc.page_content}")
-                    print(f"vectore-store_result:{doc.page_content}")
-            
-            if web_results:
-                context_parts.append("\n=== From Web Search ===")
-                context_parts.append(web_results)
-            
-            context = "\n\n".join(context_parts) if context_parts else "No context available."
-            print("llm--context",context)
-            print("doc_results--context",doc_results)
-            # Generate response with context
-            from langchain_groq import ChatGroq
-            from langchain_core.prompts import ChatPromptTemplate
-            from config.settings import settings
-            
-            llm = ChatGroq(
-                model=settings.LLM_MODEL,
-                temperature=settings.LLM_TEMPERATURE,
-                api_key=settings.GROQ_API_KEY
-            )
-            
-            prompt = ChatPromptTemplate.from_template(
-                "Based on the following search results, answer the question concisely and accurately.\n\n"
-                "Search Results:\n{context}\n\n"
-                "Question: {question}\n\n"
-                "Answer: "
-            )
-            
-            chain = prompt | llm
-            for chunk in chain.stream({"context": context, "question": query}):
-                yield chunk.content
-        
-        # Document-only search
-        elif self.rag_chain:
-            for chunk in self.rag_chain.query_stream(query):
-                yield chunk
+        # Handle different routing scenarios
+        if use_web and use_doc_search:
+            # Hybrid search - may include relevance info
+            yield from self._get_hybrid_response(query, routing_decision)
+        elif use_web and not use_doc_search:
+            # Web-only search
+            yield from self._get_web_only_response(query)
+        else:
+            # Document-only search
+            yield from self._get_document_only_response(query)
     
-    def get_sources(self, query: str, use_web_search: bool = False) -> list:
+    def _get_hybrid_response(self, query: str, routing_decision: dict) -> Generator[str, None, None]:
+        """Generate response using both document and web search."""
+        # Get web search results
+        web_results = self.tavily_search.search(query)
+        
+        # Use document results from routing (already retrieved)
+        doc_results = []
+        if self.vector_store.is_initialized:
+            doc_results = self.vector_store.search(query)
+        
+        # Format context with citations
+        context_parts = []
+        
+        if doc_results:
+            context_parts.append("=== DOCUMENT SOURCES ===")
+            for i, doc in enumerate(doc_results, 1):
+                source = doc.metadata.get("source", "Unknown")
+                context_parts.append(f"[Doc{i}] ({source}):\n{doc.page_content}")
+        
+        if web_results:
+            context_parts.append("\n=== WEB SOURCES ===")
+            context_parts.append(web_results)
+        
+        context = "\n\n".join(context_parts) if context_parts else "No context available."
+        
+        # Generate citation-aware response
+        yield from self._generate_citation_response(query, context, "hybrid")
+    
+    def _get_web_only_response(self, query: str) -> Generator[str, None, None]:
+        """Generate response using only web search."""
+        web_results = self.tavily_search.search(query)
+        context = f"=== WEB SOURCES ===\n{web_results}"
+        yield from self._generate_citation_response(query, context, "web")
+    
+    def _get_document_only_response(self, query: str) -> Generator[str, None, None]:
+        """Generate response using only document search."""
+        if not self.rag_chain:
+            yield "No documents available. Please upload documents first."
+            return
+        
+        # Use the existing RAG chain but with citation formatting
+        documents = self.vector_store.search(query)
+        
+        # Format context with citations
+        context_parts = ["=== DOCUMENT SOURCES ==="]
+        for i, doc in enumerate(documents, 1):
+            source = doc.metadata.get("source", "Unknown")
+            context_parts.append(f"[Doc{i}] ({source}):\n{doc.page_content}")
+        context = "\n\n".join(context_parts)
+        
+        yield from self._generate_citation_response(query, context, "document")
+    
+    def _generate_citation_response(self, query: str, context: str, search_type: str) -> Generator[str, None, None]:
+        """Generate response with citation awareness."""
+        from langchain_groq import ChatGroq
+        from langchain_core.prompts import ChatPromptTemplate
+        from config.settings import settings
+        
+        llm = ChatGroq(
+            model=settings.LLM_MODEL,
+            temperature=settings.LLM_TEMPERATURE,
+            api_key=settings.GROQ_API_KEY
+        )
+        
+        # Citation-aware prompt
+        prompt_template = """You are a helpful AI assistant. Answer the question based on the provided context.
+
+CONTEXT:
+{context}
+
+QUESTION: {question}
+
+INSTRUCTIONS:
+- Answer accurately using only the provided context
+- Include specific citations in your answer using [Doc1], [Web1], etc.
+- If using multiple sources, cite all relevant ones
+- Keep your answer concise but comprehensive
+- If the context doesn't contain enough information, say so
+
+ANSWER:"""
+        
+        prompt = ChatPromptTemplate.from_template(prompt_template)
+        chain = prompt | llm
+        
+        for chunk in chain.stream({"context": context, "question": query}):
+            yield chunk.content
+    
+    def get_sources(self, query: str, use_web_search: bool = False) -> dict:
         """
-        Get source documents for a query.
+        Get detailed source information for a query.
         
         Args:
             query: User's question
-            use_web_search: Whether web search was used
+            use_web_search: Whether web search toggle is enabled
             
         Returns:
-            List of source document names
+            Dict with routing info and source details
         """
-        sources = []
-        
-        # Get semantic search sources
+        # Get document results first for relevance checking
+        doc_results = []
         if self.vector_store.is_initialized:
-            docs = self.vector_store.search(query)
-            sources.extend(list(set(doc.metadata.get("source", "Unknown") for doc in docs)))
+            doc_results = self.vector_store.search(query)
         
-        # Get web search sources
-        if use_web_search:
-            web_results = self.tavily_search.search(query)
-            if web_results:
-                sources.append("Web Search Results")
+        routing_decision = self.query_router.route_with_relevance_check(query, doc_results, use_web_search)
+        
+        sources = {
+            "routing": routing_decision,
+            "document_sources": [],
+            "web_sources": []
+        }
+        
+        # Get document sources
+        if routing_decision["use_document_search"] and self.vector_store.is_initialized:
+            docs = self.vector_store.search(query)
+            sources["document_sources"] = [
+                {
+                    "name": doc.metadata.get("source", "Unknown"),
+                    "type": "document",
+                    "content_preview": doc.page_content[:200] + "..."
+                }
+                for doc in docs
+            ]
+        
+        # Get web sources
+        if routing_decision["use_web_search"]:
+            web_results = self.tavily_search.search_with_context(query)
+            if web_results and isinstance(web_results, dict) and web_results.get("results"):
+                web_items = []
+                for result in web_results["results"]:
+                    # Normalize each result to a dict in case the API returns plain strings
+                    if isinstance(result, dict):
+                        title = result.get("title", "No title")
+                        url = result.get("url", "")
+                        content = result.get("content", "")
+                    else:
+                        # result is a string -> treat as content snippet
+                        title = "(no title)"
+                        url = ""
+                        content = str(result)
+
+                    web_items.append({
+                        "title": title,
+                        "url": url,
+                        "content_preview": content[:200] + "...",
+                        "type": "web"
+                    })
+
+                sources["web_sources"] = web_items
         
         return sources

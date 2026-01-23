@@ -28,9 +28,67 @@ from ui.components import (
     display_sidebar_info,
     display_file_uploader,
     display_processing_status,
-    create_web_search_toggle
+    
 )
 from ui.chat_interface import ChatInterface
+
+
+def _display_evidence_tabs(sources: dict):
+    """Display a compact evidence panel (no tabs)."""
+    st.markdown("**Sources & Evidence**")
+    st.divider()
+
+    # Document sources
+    if sources.get("document_sources"):
+        st.markdown("**Document Sources:**")
+        for doc in sources["document_sources"]:
+            with st.expander(f"📄 {doc['name']}"):
+                st.markdown(f"**Source:** {doc['name']}")
+                st.markdown(f"**Preview:** {doc['content_preview']}")
+    else:
+        st.markdown("**Document Sources:** None")
+
+    st.divider()
+
+    # Web sources
+    if sources.get("web_sources"):
+        st.markdown("**Web Sources:**")
+        for web in sources["web_sources"]:
+            with st.expander(f"🌐 {web.get('title','No title')[:60]}..."):
+                st.markdown(f"**Title:** {web.get('title','No title')}")
+                st.markdown(f"**URL:** {web.get('url','')}")
+                st.markdown(f"**Preview:** {web.get('content_preview','')}")
+                if web.get('url'):
+                    st.markdown(f"[🔗 Open Link]({web.get('url')})")
+    else:
+        st.markdown("**Web Sources:** None")
+
+    st.divider()
+
+    # Routing & relevance
+    routing = sources.get("routing", {})
+    if routing:
+        if routing.get("category") == "document":
+            st.markdown("📄 **Document-only search**")
+        elif routing.get("category") == "web":
+            st.markdown("🌐 **Web-only search**")
+        else:
+            st.markdown("🔀 **Hybrid search** (documents + web)")
+
+        st.markdown(f"**Reason:** {routing.get('reason','')}")
+
+        # Show relevance evaluation if available
+        relevance = routing.get("relevance_check")
+        if relevance:
+            confidence_color = {
+                "HIGH": "🟢",
+                "MEDIUM": "🟡",
+                "LOW": "🔴"
+            }.get(relevance.get("confidence"), "⚪")
+
+            st.markdown(f"**Local Content Relevance:** {confidence_color} {relevance.get('confidence')}")
+            st.markdown(f"**Evaluation:** {relevance.get('reason')}")
+            st.markdown(f"**Confidence Score:** {relevance.get('score',0):.1f}/1.0")
 
 
 # Page configuration
@@ -88,8 +146,8 @@ def main():
                     except Exception as e:
                         display_processing_status(f"Error: {str(e)}", "error")
     
-    # Web search toggle
-    use_web_search = create_web_search_toggle()
+    # Web search toggle (fixed in sidebar); read value from session state
+    use_web_search = st.session_state.get("use_web_search", False)
     
     st.divider()
     
@@ -109,21 +167,22 @@ def main():
         with st.chat_message("assistant"):
             try:
                 # Stream the response
-                response = st.write_stream(
-                    chat.get_response(prompt, use_web_search=use_web_search)
-                )
+                response_placeholder = st.empty()
+                full_response = ""
                 
-                # Get sources
+                for chunk in chat.get_response(prompt, use_web_search=use_web_search):
+                    full_response += chunk
+                    response_placeholder.markdown(full_response)
+                
+                # Get detailed sources
                 sources = chat.get_sources(prompt, use_web_search=use_web_search)
                 
-                # Show sources if available
-                if sources:
-                    with st.expander("Sources"):
-                        for source in sources:
-                            st.write(f"- {source}")
+                # Display evidence tabs
+                if sources["document_sources"] or sources["web_sources"]:
+                    _display_evidence_tabs(sources)
                 
                 # Add assistant message to history
-                add_message("assistant", response, sources)
+                add_message("assistant", full_response, sources)
                 
             except Exception as e:
                 error_msg = f"Error generating response: {str(e)}"

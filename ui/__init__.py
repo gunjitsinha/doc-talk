@@ -7,7 +7,7 @@ from ui.components import (
     display_sidebar_info,
     display_file_uploader,
     display_processing_status,
-    create_web_search_toggle
+    
 )
 from ui.chat_interface import ChatInterface
 
@@ -19,6 +19,6 @@ __all__ = [
     "display_sidebar_info",
     "display_file_uploader",
     "display_processing_status",
-    "create_web_search_toggle",
+    
     "ChatInterface"
 ]

@@ -27,9 +27,17 @@ def init_session_state():
     
     if "vector_store_initialized" not in st.session_state:
         st.session_state.vector_store_initialized = False
-    
     if "uploaded_files" not in st.session_state:
-        st.session_state.uploaded_files = []
+        # Populate uploaded files from input_data directory on startup
+        base_dir = Path(__file__).resolve().parents[1]
+        input_dir = base_dir / "input_data"
+        input_dir.mkdir(parents=True, exist_ok=True)
+        files = [f.name for f in input_dir.iterdir() if f.is_file()]
+        st.session_state.uploaded_files = files
+
+    # Web search toggle persisted in session state
+    if "use_web_search" not in st.session_state:
+        st.session_state.use_web_search = False
 
 
 def display_chat_history():
@@ -38,11 +46,15 @@ def display_chat_history():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             
-            # Show sources if available
-            if message.get("sources"):
-                with st.expander("📚 Sources"):
-                    for source in message["sources"]:
-                        st.write(f"- {source}")
+            # Minimal source display: only show local content relevance and confidence
+            if message.get("sources") and isinstance(message["sources"], dict):
+                routing = message["sources"].get("routing", {})
+                relevance = routing.get("relevance_check")
+                if relevance:
+                    confidence = relevance.get("confidence", "UNKNOWN")
+                    score = relevance.get("score", 0)
+                    emoji = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}.get(confidence, "⚪")
+                    st.caption(f"Local content relevance: {emoji} {confidence} ({score:.1f})")
 
 
 def add_message(role: str, content: str, sources: List[str] = None):
@@ -113,19 +125,19 @@ def display_sidebar_info():
     with st.sidebar:
         st.header("About")
         st.markdown("""
-        This is a **AI Advocte RAG Chatbot** that can:
+        This is a **Hybrid RAG Chatbot** that can:
         - Answer questions from your documents
-        - Search the web
-        - Have natural conversations
+        - Search the web dynamically
+        - Provide citation-aware answers
         
-        **How to use:**
-        1. Upload PDF or TXT files
-        2. Wait for processing
-        3. Ask questions!
+        **Smart Routing:**
+        - 📄 Document queries → Local search only
+        - 🌐 Current events → Web search only  
+        - 🔀 Complex queries → Hybrid search
         """)
         
         st.divider()
-        
+
         # Show upload status
         st.header("📁 Uploaded Files")
         if st.session_state.uploaded_files:
@@ -133,9 +145,19 @@ def display_sidebar_info():
                 st.write(f"✅ {file}")
         else:
             st.write("No files uploaded yet")
-        
+
         st.divider()
-        
+
+        # Web search toggle (fixed in sidebar)
+        st.checkbox(
+            "🌐 Enable Web Search",
+            value=st.session_state.get("use_web_search", False),
+            key="use_web_search",
+            help="When enabled, the chatbot will also search the web for answers"
+        )
+
+        st.divider()
+
         # Clear chat button
         if st.button("🗑️ Clear Chat History"):
             clear_chat_history()
