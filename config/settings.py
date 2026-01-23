@@ -13,6 +13,7 @@ Topics to teach:
 """
 
 import os
+import streamlit as st
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 from typing import Optional
