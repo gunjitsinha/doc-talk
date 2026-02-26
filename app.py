@@ -31,6 +31,9 @@ from ui.components import (
     
 )
 from ui.chat_interface import ChatInterface
+from core.logger import log_interaction
+from datetime import datetime
+import time
 
 
 def _display_evidence_tabs(sources: dict):
@@ -130,6 +133,44 @@ def main():
                     add_message("assistant", full_response, sources)
                 else:
                     add_message("assistant", full_response, None)
+
+                # --- Logging: record question, answer, and retrieved chunks ---
+                try:
+                    start_ts = datetime.utcnow().isoformat() + "Z"
+                    # Retrieve scored documents if possible
+                    retrieved = []
+                    try:
+                        scored = chat.vector_store.search_with_scores(prompt)
+                    except Exception:
+                        scored = []
+
+                    for i, item in enumerate(scored):
+                        # item may be (Document, score) or just Document depending on client
+                        if isinstance(item, tuple) and len(item) == 2:
+                            doc, score = item
+                        else:
+                            doc = item
+                            score = None
+
+                        retrieved.append({
+                            "rank": i + 1,
+                            "source": doc.metadata.get("source", "Unknown"),
+                            "snippet": (doc.page_content[:200] + "...") if doc.page_content else "",
+                            "score": float(score) if score is not None else None,
+                        })
+
+                    log_entry = {
+                        "timestamp": start_ts,
+                        "question": prompt,
+                        "answer": full_response,
+                        "retrieved_chunks": retrieved,
+                        "llm_model": settings.LLM_MODEL,
+                    }
+
+                    log_interaction(log_entry)
+                except Exception as e:
+                    # Do not block user flow if logging fails
+                    print(f"Logging failed: {e}")
                 
             except Exception as e:
                 error_msg = f"Error generating response: {str(e)}"
