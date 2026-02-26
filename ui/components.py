@@ -28,11 +28,11 @@ def init_session_state():
     if "vector_store_initialized" not in st.session_state:
         st.session_state.vector_store_initialized = False
     if "uploaded_files" not in st.session_state:
-        # Populate uploaded files from input_data directory on startup
+        # Show admin-managed Documents folder contents on startup
         base_dir = Path(__file__).resolve().parents[1]
-        input_dir = base_dir / "input_data"
-        input_dir.mkdir(parents=True, exist_ok=True)
-        files = [f.name for f in input_dir.iterdir() if f.is_file()]
+        docs_dir = base_dir / "Documents"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        files = [f.name for f in docs_dir.iterdir() if f.is_file()]
         st.session_state.uploaded_files = files
 
 
@@ -88,28 +88,8 @@ def clear_chat_history():
     
 #     return file_path
 
-def save_uploaded_file(uploaded_file) -> str:
-    """
-    Save an uploaded file permanently into the repo `input_data/` folder.
-
-    Returns the absolute path to the saved file.
-    """
-    base_dir = Path(__file__).resolve().parents[1]  # project root
-    target_dir = base_dir / "input_data"
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    dest = target_dir / uploaded_file.name
-    stem = dest.stem
-    suffix = dest.suffix
-    counter = 1
-    while dest.exists():
-        dest = target_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
-
-    with open(dest, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    return str(dest)
+# Uploaded files are not persisted by the app; admins should add files to the
+# `Documents/` folder and restart the app to index them.
 
 
 def display_sidebar_info():
@@ -152,7 +132,15 @@ def display_file_uploader():
         accept_multiple_files=True,
         help="Upload documents to chat with"
     )
-    return uploaded_files
+
+    # Option to persist uploaded files into the admin Documents folder
+    save_to_documents = st.checkbox(
+        "Save uploaded files to Documents (persist across restarts)",
+        value=False,
+        help="When checked, uploaded files will be copied into the project's Documents/ folder before indexing"
+    )
+
+    return uploaded_files, save_to_documents
 
 
 def display_processing_status(message: str, status: str = "info"):

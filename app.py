@@ -79,14 +79,14 @@ def main():
     
     # File upload section
     with st.expander("Upload Documents", expanded=not st.session_state.vector_store_initialized):
-        uploaded_files = display_file_uploader()
-        
+        uploaded_files, save_to_documents = display_file_uploader()
+
         if uploaded_files:
             # Process button
             if st.button("Process Documents", type="primary"):
                 with st.spinner("Processing documents..."):
                     try:
-                        num_chunks = chat.process_uploaded_files(uploaded_files)
+                        num_chunks = chat.process_uploaded_files(uploaded_files, save_to_documents)
                         display_processing_status(
                             f"Processed {len(uploaded_files)} file(s) into {num_chunks} chunks!",
                             "success"

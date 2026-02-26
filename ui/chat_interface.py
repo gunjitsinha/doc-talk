@@ -15,12 +15,15 @@ Topics to teach:
 
 import streamlit as st
 from typing import Generator, Optional
+from pathlib import Path
+import tempfile
+import os
 
 from core.document_processor import DocumentProcessor
 from core.vector_store import VectorStoreManager
 from core.chain import RAGChain
 from core.router import QueryRouter
-from ui.components import add_message, save_uploaded_file
+from ui.components import add_message
 
 
 class ChatInterface:
@@ -40,11 +43,33 @@ class ChatInterface:
         self.vector_store = VectorStoreManager()
         if self.vector_store.is_initialized:
             st.session_state.vector_store_initialized = True
+        # Admin-managed Documents folder: automatically index files at startup
+        # if the vector store isn't already initialized.
+        base_dir = Path(__file__).resolve().parents[1]
+        docs_dir = base_dir / "Documents"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.vector_store.is_initialized:
+            all_chunks = []
+            for p in docs_dir.iterdir():
+                if p.is_file() and p.suffix.lower() in (".pdf", ".txt"):
+                    try:
+                        chunks = self.doc_processor.process(str(p))
+                        for chunk in chunks:
+                            chunk.metadata["source"] = p.name
+                        all_chunks.extend(chunks)
+                    except Exception as e:
+                        # continue indexing other files even if one fails
+                        print(f"Failed to process {p}: {e}")
+
+            if all_chunks:
+                self.vector_store.create_from_documents(all_chunks)
+                st.session_state.vector_store_initialized = True
         self.rag_chain: Optional[RAGChain] = None
         self.hybrid_search: Optional[object] = None
         self.query_router = QueryRouter()
     
-    def process_uploaded_files(self, uploaded_files) -> int:
+    def process_uploaded_files(self, uploaded_files, save_to_documents: bool = False) -> int:
         """
         Process uploaded files and add to vector store.
         
@@ -55,29 +80,57 @@ class ChatInterface:
             Number of chunks processed
         """
         all_chunks = []
-        
+
+        base_dir = Path(__file__).resolve().parents[1]
+        docs_dir = base_dir / "Documents"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+
         for uploaded_file in uploaded_files:
-            # Save file temporarily
-            file_path = save_uploaded_file(uploaded_file)
-            
-            # Process the document
-            chunks = self.doc_processor.process(file_path)
-            
-            # Add source metadata
-            for chunk in chunks:
-                chunk.metadata["source"] = uploaded_file.name
-            
-            all_chunks.extend(chunks)
-            
-            # Track uploaded files
-            if uploaded_file.name not in st.session_state.uploaded_files:
-                st.session_state.uploaded_files.append(uploaded_file.name)
-        
-        # Add to vector store
+            if save_to_documents:
+                # Persist uploaded file into Documents/ before processing
+                dest = docs_dir / uploaded_file.name
+                stem = dest.stem
+                suffix = dest.suffix
+                counter = 1
+                while dest.exists():
+                    dest = docs_dir / f"{stem}_{counter}{suffix}"
+                    counter += 1
+
+                with open(dest, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+
+                file_path = str(dest)
+
+                # Ensure session state reflects persisted documents
+                if uploaded_file.name not in st.session_state.uploaded_files:
+                    st.session_state.uploaded_files.append(Path(file_path).name)
+
+            else:
+                # Write to a temporary file (do NOT persist in the repo)
+                suffix = Path(uploaded_file.name).suffix or ""
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(uploaded_file.getbuffer())
+                    file_path = tmp.name
+
+            try:
+                chunks = self.doc_processor.process(file_path)
+                for chunk in chunks:
+                    chunk.metadata["source"] = uploaded_file.name
+                all_chunks.extend(chunks)
+            finally:
+                # Remove the temporary file if we created one
+                if not save_to_documents:
+                    try:
+                        os.unlink(file_path)
+                    except Exception:
+                        pass
+
+        # Add to vector store (in-memory / persisted by vector store save)
         if all_chunks:
             self.vector_store.add_documents(all_chunks)
             st.session_state.vector_store_initialized = True
-        
+
+        # Return number of chunks processed
         return len(all_chunks)
     
     def initialize_rag_chain(self):
