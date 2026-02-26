@@ -19,12 +19,14 @@ Thumbs.db
 
 # Streamlit/IDE/editor
 /.streamlit/local*.*
+/.streamlit/secrets.toml
 .vscode/
 .idea/
 
 # Local app data / uploads / indexes
 input_data/
 data/faiss_index/
+Documents/*
 faiss_index/
 objective/
 *.sqlite3
@@ -32,6 +34,7 @@ objective/
 
 # Logs, tests, builds
 *.log
+logs/*
 dist/
 build/
 *.egg-info/
