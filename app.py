@@ -54,30 +54,7 @@ def _display_evidence_tabs(sources: dict):
 
     st.divider()
 
-    # Routing & relevance
-    routing = sources.get("routing", {})
-    if routing:
-        if routing.get("category") == "document":
-            st.markdown("📄 **Document-only search**")
-        elif routing.get("category") == "web":
-            st.markdown("🌐 **Web-only search**")
-        else:
-            st.markdown("🔀 **Hybrid search** (documents + web)")
-
-        st.markdown(f"**Reason:** {routing.get('reason','')}")
-
-        # Show relevance evaluation if available
-        relevance = routing.get("relevance_check")
-        if relevance:
-            confidence_color = {
-                "HIGH": "🟢",
-                "MEDIUM": "🟡",
-                "LOW": "🔴"
-            }.get(relevance.get("confidence"), "⚪")
-
-            st.markdown(f"**Local Content Relevance:** {confidence_color} {relevance.get('confidence')}")
-            st.markdown(f"**Evaluation:** {relevance.get('reason')}")
-            st.markdown(f"**Confidence Score:** {relevance.get('score',0):.1f}/1.0")
+    # Routing info removed from evidence panel (local-only mode)
 
 
 # Page configuration

@@ -43,15 +43,10 @@ def display_chat_history():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             
-            # Minimal source display: only show local content relevance and confidence
+            # Minimal source display: show source info only (relevance removed)
             if message.get("sources") and isinstance(message["sources"], dict):
                 routing = message["sources"].get("routing", {})
-                relevance = routing.get("relevance_check")
-                if relevance:
-                    confidence = relevance.get("confidence", "UNKNOWN")
-                    score = relevance.get("score", 0)
-                    emoji = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}.get(confidence, "⚪")
-                    st.caption(f"Local content relevance: {emoji} {confidence} ({score:.1f})")
+                # Previously showed a relevance score here; removed for local-only mode
 
 
 def add_message(role: str, content: str, sources: List[str] = None):
