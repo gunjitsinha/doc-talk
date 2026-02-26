@@ -35,9 +35,6 @@ def init_session_state():
         files = [f.name for f in input_dir.iterdir() if f.is_file()]
         st.session_state.uploaded_files = files
 
-    # Web search toggle persisted in session state
-    if "use_web_search" not in st.session_state:
-        st.session_state.use_web_search = False
 
 
 def display_chat_history():
@@ -125,15 +122,9 @@ def display_sidebar_info():
     with st.sidebar:
         st.header("About")
         st.markdown("""
-        This is a **Hybrid RAG Chatbot** that can:
+        This is a **Local RAG Chatbot** that can:
         - Answer questions from your documents
-        - Search the web dynamically
         - Provide citation-aware answers
-        
-        **Smart Routing:**
-        - 📄 Document queries → Local search only
-        - 🌐 Current events → Web search only  
-        - 🔀 Complex queries → Hybrid search
         """)
         
         st.divider()
@@ -148,13 +139,7 @@ def display_sidebar_info():
 
         st.divider()
 
-        # Web search toggle (fixed in sidebar)
-        st.checkbox(
-            "🌐 Enable Web Search",
-            value=st.session_state.get("use_web_search", False),
-            key="use_web_search",
-            help="When enabled, the chatbot will also search the web for answers"
-        )
+
 
         st.divider()
 
@@ -194,9 +179,5 @@ def display_processing_status(message: str, status: str = "info"):
 
 
 def create_web_search_toggle() -> bool:
-    """Create a toggle for web search."""
-    return st.toggle(
-        "🌐 Enable Web Search",
-        value=False,
-        help="When enabled, the chatbot will also search the web for answers"
-    )
+    """Web search toggle removed in local-only mode."""
+    return False

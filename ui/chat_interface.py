@@ -20,7 +20,6 @@ from core.document_processor import DocumentProcessor
 from core.vector_store import VectorStoreManager
 from core.chain import RAGChain
 from core.router import QueryRouter
-from tools.tavily_search import TavilySearchTool, HybridSearchManager
 from ui.components import add_message, save_uploaded_file
 
 
@@ -42,8 +41,7 @@ class ChatInterface:
         if self.vector_store.is_initialized:
             st.session_state.vector_store_initialized = True
         self.rag_chain: Optional[RAGChain] = None
-        self.tavily_search = TavilySearchTool()
-        self.hybrid_search: Optional[HybridSearchManager] = None
+        self.hybrid_search: Optional[object] = None
         self.query_router = QueryRouter()
     
     def process_uploaded_files(self, uploaded_files) -> int:
@@ -86,10 +84,7 @@ class ChatInterface:
         """Initialize the RAG chain after documents are loaded."""
         if self.vector_store.is_initialized:
             self.rag_chain = RAGChain(self.vector_store)
-            self.hybrid_search = HybridSearchManager(
-                self.vector_store,
-                self.tavily_search
-            )
+            self.hybrid_search = None
     
     def get_response(
         self,
@@ -114,64 +109,29 @@ class ChatInterface:
         doc_results = []
         if self.vector_store.is_initialized:
             doc_results = self.vector_store.search(query)
-        
-        # Use intelligent routing with relevance checking
+
+        # Route (local-only): keep routing for relevance metadata but disable web
         routing_decision = self.query_router.route_with_relevance_check(
-            query, doc_results, use_web_search
+            query, doc_results, False
         )
-        
-        use_doc_search = routing_decision["use_document_search"]
-        use_web = routing_decision["use_web_search"]
-        
-        # If no sources available, provide helpful message
-        if not use_doc_search and not use_web:
-            yield "Please upload some documents first, or enable web search to get started!"
+
+        # If no local documents available, prompt user to upload
+        if not doc_results:
+            yield "Please upload some documents first to use this local-only assistant."
             return
-        
-        # Handle different routing scenarios
-        if use_web and use_doc_search:
-            # Hybrid search - may include relevance info
-            yield from self._get_hybrid_response(query, routing_decision)
-        elif use_web and not use_doc_search:
-            # Web-only search
-            yield from self._get_web_only_response(query)
-        else:
-            # Document-only search
-            yield from self._get_document_only_response(query)
+
+        # Document-only response
+        yield from self._get_document_only_response(query)
     
     def _get_hybrid_response(self, query: str, routing_decision: dict) -> Generator[str, None, None]:
         """Generate response using both document and web search."""
-        # Get web search results
-        web_results = self.tavily_search.search(query)
-        
-        # Use document results from routing (already retrieved)
-        doc_results = []
-        if self.vector_store.is_initialized:
-            doc_results = self.vector_store.search(query)
-        
-        # Format context with citations
-        context_parts = []
-        
-        if doc_results:
-            context_parts.append("=== DOCUMENT SOURCES ===")
-            for i, doc in enumerate(doc_results, 1):
-                source = doc.metadata.get("source", "Unknown")
-                context_parts.append(f"[Doc{i}] ({source}):\n{doc.page_content}")
-        
-        if web_results:
-            context_parts.append("\n=== WEB SOURCES ===")
-            context_parts.append(web_results)
-        
-        context = "\n\n".join(context_parts) if context_parts else "No context available."
-        
-        # Generate citation-aware response
-        yield from self._generate_citation_response(query, context, "hybrid")
+        # Hybrid path removed in local-only mode
+        yield from ()
     
     def _get_web_only_response(self, query: str) -> Generator[str, None, None]:
         """Generate response using only web search."""
-        web_results = self.tavily_search.search(query)
-        context = f"=== WEB SOURCES ===\n{web_results}"
-        yield from self._generate_citation_response(query, context, "web")
+        # Web-only responses are disabled in local-only mode
+        yield from ()
     
     def _get_document_only_response(self, query: str) -> Generator[str, None, None]:
         """Generate response using only document search."""
@@ -247,7 +207,6 @@ ANSWER:"""
         sources = {
             "routing": routing_decision,
             "document_sources": [],
-            "web_sources": []
         }
         
         # Get document sources
@@ -262,30 +221,6 @@ ANSWER:"""
                 for doc in docs
             ]
         
-        # Get web sources
-        if routing_decision["use_web_search"]:
-            web_results = self.tavily_search.search_with_context(query)
-            if web_results and isinstance(web_results, dict) and web_results.get("results"):
-                web_items = []
-                for result in web_results["results"]:
-                    # Normalize each result to a dict in case the API returns plain strings
-                    if isinstance(result, dict):
-                        title = result.get("title", "No title")
-                        url = result.get("url", "")
-                        content = result.get("content", "")
-                    else:
-                        # result is a string -> treat as content snippet
-                        title = "(no title)"
-                        url = ""
-                        content = str(result)
-
-                    web_items.append({
-                        "title": title,
-                        "url": url,
-                        "content_preview": content[:200] + "...",
-                        "type": "web"
-                    })
-
-                sources["web_sources"] = web_items
+        # Web sources removed for local-only mode
         
         return sources

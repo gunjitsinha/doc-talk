@@ -116,55 +116,16 @@ class QueryRouter:
         classification = self.classify_query(query)
         intent_category = classification["category"]
 
-        # If web search is disabled, always use document-only
-        if not web_search_enabled:
-            return {
-                "use_web_search": False,
-                "use_document_search": True,
-                "category": "document",
-                "reason": "Web search disabled",
-                "relevance_check": None
-            }
+        # Local-only routing: never use web search. Evaluate local relevance for diagnostics.
+        if documents:
+            evaluation = self.relevance_checker.evaluate_relevance(query, documents)
+        else:
+            evaluation = None
 
-        # If intent is clearly web-based, use web search
-        if intent_category == "web":
-            return {
-                "use_web_search": True,
-                "use_document_search": False,
-                "category": intent_category,
-                "reason": classification["reason"],
-                "relevance_check": None
-            }
-
-        # For document or hybrid intent, check if local content is sufficient
-        if intent_category in ["document", "hybrid"] and documents:
-            relevance_result = self.relevance_checker.should_augment_with_web(query, documents)
-
-            if relevance_result["should_augment"]:
-                # Local content insufficient, augment with web
-                return {
-                    "use_web_search": True,
-                    "use_document_search": True,
-                    "category": "hybrid",
-                    "reason": f"Local content insufficient: {relevance_result['reason']}",
-                    "relevance_check": relevance_result["evaluation"]
-                }
-            else:
-                # Local content sufficient
-                use_web = (intent_category == "hybrid")  # Use web for hybrid queries even if local is sufficient
-                return {
-                    "use_web_search": use_web,
-                    "use_document_search": True,
-                    "category": intent_category,
-                    "reason": f"Local content sufficient: {relevance_result['reason']}",
-                    "relevance_check": relevance_result["evaluation"]
-                }
-
-        # Default fallback
         return {
-            "use_web_search": True,
-            "use_document_search": bool(documents),
-            "category": "hybrid",
-            "reason": "Default hybrid routing",
-            "relevance_check": None
+            "use_web_search": False,
+            "use_document_search": True if documents else False,
+            "category": "document",
+            "reason": classification.get("reason", "Local-only routing"),
+            "relevance_check": evaluation
         }

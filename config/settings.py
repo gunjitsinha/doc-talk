@@ -78,7 +78,6 @@ class Settings:
     # API Keys (loaded from Streamlit secrets or environment)
     # Uses get_secret() for dual compatibility
     GROQ_API_KEY: str = get_secret("GROQ_API_KEY", "")
-    TAVILY_API_KEY: str = get_secret("TAVILY_API_KEY", "")
     
     # LLM Configuration
     LLM_MODEL: str = "llama-3.1-8b-instant"  # Free Groq model
@@ -107,14 +106,6 @@ class Settings:
                 "3. Do NOT use quotes in .env file\n"
                 "4. Restart streamlit"
             )
-        if not self.TAVILY_API_KEY:
-            raise ValueError(
-                "❌ TAVILY_API_KEY is not set!\n"
-                "1. Get it from: https://tavily.com/\n"
-                "2. Add to .env: TAVILY_API_KEY=your_actual_key\n"
-                "3. Do NOT use quotes in .env file\n"
-                "4. Restart streamlit"
-            )
         
         # Check if keys look valid (should be longer than just the prefix)
         if self.GROQ_API_KEY.startswith("your_") or len(self.GROQ_API_KEY) < 10:
@@ -122,11 +113,7 @@ class Settings:
                 "❌ GROQ_API_KEY appears to be a placeholder!\n"
                 "Please replace with your actual key from https://console.groq.com/"
             )
-        if self.TAVILY_API_KEY.startswith("your_") or len(self.TAVILY_API_KEY) < 10:
-            raise ValueError(
-                "❌ TAVILY_API_KEY appears to be a placeholder!\n"
-                "Please replace with your actual key from https://tavily.com/"
-            )
+        # No web-search API required for local-only deployment
         
         return True
 

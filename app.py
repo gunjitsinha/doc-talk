@@ -50,18 +50,7 @@ def _display_evidence_tabs(sources: dict):
 
     st.divider()
 
-    # Web sources
-    if sources.get("web_sources"):
-        st.markdown("**Web Sources:**")
-        for web in sources["web_sources"]:
-            with st.expander(f"🌐 {web.get('title','No title')[:60]}..."):
-                st.markdown(f"**Title:** {web.get('title','No title')}")
-                st.markdown(f"**URL:** {web.get('url','')}")
-                st.markdown(f"**Preview:** {web.get('content_preview','')}")
-                if web.get('url'):
-                    st.markdown(f"[🔗 Open Link]({web.get('url')})")
-    else:
-        st.markdown("**Web Sources:** None")
+    # Web sources removed in local-only mode
 
     st.divider()
 
@@ -146,9 +135,6 @@ def main():
                     except Exception as e:
                         display_processing_status(f"Error: {str(e)}", "error")
     
-    # Web search toggle (fixed in sidebar); read value from session state
-    use_web_search = st.session_state.get("use_web_search", False)
-    
     st.divider()
     
     # Display chat history
@@ -170,17 +156,17 @@ def main():
                 response_placeholder = st.empty()
                 full_response = ""
                 
-                for chunk in chat.get_response(prompt, use_web_search=use_web_search):
+                for chunk in chat.get_response(prompt, use_web_search=False):
                     full_response += chunk
                     response_placeholder.markdown(full_response)
                 
-                # Get detailed sources
-                sources = chat.get_sources(prompt, use_web_search=use_web_search)
-                
-                # Display evidence tabs
-                if sources["document_sources"] or sources["web_sources"]:
+                # Get detailed sources (local-only)
+                sources = chat.get_sources(prompt)
+
+                # Display evidence tabs if document sources exist
+                if sources.get("document_sources"):
                     _display_evidence_tabs(sources)
-                
+
                 # Add assistant message to history
                 add_message("assistant", full_response, sources)
                 

@@ -1,4 +1,2 @@
-"""Tools module initialization."""
-from tools.tavily_search import TavilySearchTool, HybridSearchManager
-
-__all__ = ["TavilySearchTool", "HybridSearchManager"]
+"""Tools module initialization (web search disabled)."""
+__all__ = []
