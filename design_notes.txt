@@ -1,0 +1,28 @@
+Assumptions
+
+- LLM access: an LLM API key (GROQ) is available in the environment.
+- Documents are provided as PDF or TXT and are of reasonable size (not multi-GB).
+- Single-instance Streamlit deployment is acceptable; multi-tenant handling is not required.
+- Admins can place persistent documents into the `Documents/` folder and restart to index.
+
+Trade-offs considered
+
+- Local embeddings + FAISS: lower recurring cost and better privacy but higher local resource use.
+- No web search: improves determinism and privacy but loses access to up-to-date external information.
+- JSONL logs: simple and robust for audit; not optimized for complex queries or analytics.
+- Temporary uploads by default: reduces repo clutter but requires explicit persistence to keep files.
+
+Improvements for production
+
+- Add a background ingestion service and a reindex API so admins can add files without restarts.
+- Provide authentication and per-tenant isolation for multi-user deployments.
+- Use a task queue (Celery/RQ) for chunking, embedding, and incremental indexing to scale ingestion.
+- Replace JSONL with a lightweight logging pipeline (e.g., push logs to an ELK stack or data warehouse) for analytics.
+- Emit metrics (latency, query rate, indexing errors) and add alerting/monitoring.
+- Containerize the app, add CI/CD, and provide deployment manifests (Docker, Kubernetes).
+- Add unit and integration tests for ingestion, retrieval, and generation components.
+- Consider optional hostable vector DB (Pinecone, Weaviate) for horizontal scaling when needed.
+
+Notes
+
+- The current design favors simplicity, privacy, and local execution. Production changes should balance operational complexity against the value of scalability and real-time data.
