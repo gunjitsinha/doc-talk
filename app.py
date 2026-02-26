@@ -35,26 +35,8 @@ from ui.chat_interface import ChatInterface
 
 def _display_evidence_tabs(sources: dict):
     """Display a compact evidence panel (no tabs)."""
-    st.markdown("**Sources & Evidence**")
-    st.divider()
-
-    # Document sources
-    if sources.get("document_sources"):
-        st.markdown("**Document Sources:**")
-        for doc in sources["document_sources"]:
-            with st.expander(f"📄 {doc['name']}"):
-                st.markdown(f"**Source:** {doc['name']}")
-                st.markdown(f"**Preview:** {doc['content_preview']}")
-    else:
-        st.markdown("**Document Sources:** None")
-
-    st.divider()
-
-    # Web sources removed in local-only mode
-
-    st.divider()
-
-    # Routing info removed from evidence panel (local-only mode)
+    # Evidence panel disabled: do not display document sources or related info
+    return
 
 
 # Page configuration
@@ -140,12 +122,14 @@ def main():
                 # Get detailed sources (local-only)
                 sources = chat.get_sources(prompt)
 
-                # Display evidence tabs if document sources exist
-                if sources.get("document_sources"):
+                # If there are multiple document sources, show evidence and attach sources.
+                # If only one (or none), omit sources from the message to keep responses concise.
+                doc_sources = sources.get("document_sources", [])
+                if doc_sources and len(doc_sources) > 1:
                     _display_evidence_tabs(sources)
-
-                # Add assistant message to history
-                add_message("assistant", full_response, sources)
+                    add_message("assistant", full_response, sources)
+                else:
+                    add_message("assistant", full_response, None)
                 
             except Exception as e:
                 error_msg = f"Error generating response: {str(e)}"
