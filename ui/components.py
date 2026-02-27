@@ -32,7 +32,7 @@ def init_session_state():
         base_dir = Path(__file__).resolve().parents[1]
         docs_dir = base_dir / "Documents"
         docs_dir.mkdir(parents=True, exist_ok=True)
-        files = [f.name for f in docs_dir.iterdir() if f.is_file()]
+        files = [f.name for f in docs_dir.iterdir() if f.is_file() and not f.name.startswith('.git')]
         st.session_state.uploaded_files = files
 
 

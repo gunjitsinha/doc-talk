@@ -15,6 +15,10 @@ Simple retrieval-augmented assistant that answers questions from a local documen
 - Optional persistence of uploaded files into `Documents/` via a checkbox.
 - Interaction logging to `logs/log.jsonl` (one JSON object per query).
 
+## Homepage UI Screenshot
+
+![homepage UI screenshot](Screenshots/homepage-ui.png)
+
 ## How it works (short)
 
 - Put `.pdf` or `.txt` files into `Documents/` to have them indexed at startup.

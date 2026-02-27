@@ -102,8 +102,9 @@ class ChatInterface:
                 file_path = str(dest)
 
                 # Ensure session state reflects persisted documents
-                if uploaded_file.name not in st.session_state.uploaded_files:
-                    st.session_state.uploaded_files.append(Path(file_path).name)
+                persisted_name = Path(file_path).name
+                if not persisted_name.startswith('.git') and persisted_name not in st.session_state.uploaded_files:
+                    st.session_state.uploaded_files.append(persisted_name)
 
             else:
                 # Write to a temporary file (do NOT persist in the repo)
